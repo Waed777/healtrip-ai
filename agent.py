@@ -3,94 +3,161 @@ import os
 
 from openai import OpenAI
 
-from safety import detect_emergency, emergency_response
-from tools import TOOL_DEFINITIONS, execute_tool
+from safety import (
+    detect_emergency,
+    emergency_response,
+)
+
+from tools import (
+    TOOL_DEFINITIONS,
+    execute_tool,
+)
 
 
-MODEL = os.getenv("OPENAI_MODEL", "gpt-5")
+DEFAULT_MODEL = "gpt-4o-mini"
 
 
 SYSTEM_PROMPT = """
-You are HealTrip AI, a Patient Decision Assistant.
+You are HealTrip AI, a healthcare navigation assistant.
 
-You help users identify an appropriate next healthcare step.
+You are not a doctor.
 
-You are NOT a doctor.
-You MUST NOT diagnose diseases.
-You MUST NOT claim certainty about a medical condition.
+You must not diagnose diseases.
 
-If symptoms may indicate an emergency, prioritize urgent medical evaluation.
+You help users understand possible next healthcare steps.
 
-Ask concise clarification questions when important information is missing.
+SAFETY:
 
-Use database tools when the user asks for doctors or hospitals.
+If the user describes potentially urgent symptoms,
+prioritize urgent medical evaluation.
 
-Never invent doctors, hospitals, appointments, prices, ratings,
-phone numbers, addresses, or availability.
+Do not delay emergency care by asking unnecessary questions.
 
-Only mention providers returned by the database tools.
+CLARIFICATION:
 
-If no provider is found, clearly say that no matching provider
-was found in the prototype database.
+When important information is missing,
+ask concise questions such as age, duration,
+severity, and associated symptoms.
+
+TOOLS:
+
+Use search_doctors when the user asks for a doctor or specialist.
+
+Use search_hospitals when the user asks for hospital options.
+
+Never invent doctors.
+
+Never invent hospitals.
+
+Never invent appointments.
+
+Never invent availability.
+
+Never invent prices.
+
+Never invent ratings.
+
+Never invent phone numbers.
+
+Only mention provider information returned by the tools.
+
+The database is prototype/demo data.
+
+If no matching provider exists,
+say that no matching provider was found
+in the HealTrip prototype database.
+
+LANGUAGE:
 
 Respond in the user's language.
 
 Support Arabic and English.
 
-This is a technical prototype and not a diagnostic medical system.
+STYLE:
+
+Be concise.
+
+Be calm.
+
+Be structured.
+
+When appropriate use:
+
+Suggested next step
+Reason
+Questions
+Available options
+
+MEDICAL SAFETY:
+
+This is decision support only.
+
+It is not a diagnosis.
+
+Do not claim certainty about a medical condition.
 """
 
 
 def get_api_key():
+
     api_key = None
 
     try:
+
         import streamlit as st
 
-        if "OPENAI_API_KEY" in st.secrets:
-            api_key = st.secrets["OPENAI_API_KEY"]
+        api_key = st.secrets.get(
+            "OPENAI_API_KEY"
+        )
+
     except Exception:
-        pass
+
+        api_key = None
 
     if not api_key:
-        api_key = os.getenv("OPENAI_API_KEY")
+
+        api_key = os.getenv(
+            "OPENAI_API_KEY"
+        )
 
     if not api_key:
-        raise RuntimeError(
-            "OPENAI_API_KEY is missing."
-        )
 
-    if not isinstance(api_key, str):
-        raise RuntimeError(
-            "OPENAI_API_KEY is not a string."
-        )
+        return None
+
+    api_key = str(api_key)
 
     api_key = api_key.strip()
 
     if not api_key:
-        raise RuntimeError(
-            "OPENAI_API_KEY is empty."
-        )
 
-    try:
-        api_key.encode("ascii")
-    except UnicodeEncodeError:
-        raise RuntimeError(
-            "OPENAI_API_KEY contains non-ASCII characters. "
-            "Create a new API key and paste it directly into "
-            "Streamlit Secrets."
-        )
+        return None
 
     return api_key
 
 
-def get_client():
+def get_model():
 
-    api_key = get_api_key()
+    try:
 
-    return OpenAI(
-        api_key=api_key,
+        import streamlit as st
+
+        model = st.secrets.get(
+            "OPENAI_MODEL"
+        )
+
+        if model:
+            return str(model).strip()
+
+    except Exception:
+
+        pass
+
+    model = os.getenv(
+        "OPENAI_MODEL",
+        DEFAULT_MODEL,
     )
+
+    return model.strip()
 
 
 def detect_language(text):
@@ -101,10 +168,131 @@ def detect_language(text):
         if "\u0600" <= character <= "\u06ff"
     )
 
-    if arabic_count > 3:
+    if arabic_count >= 2:
         return "Arabic"
 
     return "English"
+
+
+def local_fallback(
+    user_message,
+    language,
+):
+
+    text = user_message.lower()
+
+    if language == "Arabic":
+
+        if (
+            "طبيب" in text
+            or "دكتور" in text
+            or "طبيبة" in text
+        ):
+
+            return """
+### 👨‍⚕️ البحث عن طبيب
+
+أستطيع مساعدتك في البحث داخل قاعدة بيانات HealTrip التجريبية.
+
+جرّبي مثلاً:
+
+**"أريد طبيب قلب في الرياض"**
+
+أو:
+
+**"أريد طبيب باطنية في الرياض"**
+
+> البيانات المعروضة في هذا البروتوتايب تجريبية وليست نظام حجز حقيقي.
+"""
+
+        if "مستشفى" in text:
+
+            return """
+### 🏥 البحث عن مستشفى
+
+أستطيع البحث داخل قاعدة بيانات المستشفيات التجريبية.
+
+يمكنك تحديد:
+
+- المدينة
+- التخصص
+- هل تحتاجين إلى طوارئ
+
+مثال:
+
+**"أريد مستشفى في الرياض فيه طوارئ."**
+"""
+
+        return """
+### 🤖 HealTrip AI
+
+أستطيع مساعدتك في تحديد الخطوة الصحية التالية.
+
+يمكنك أن تخبريني:
+
+- ما الأعراض؟
+- منذ متى بدأت؟
+- هل هي شديدة؟
+- العمر؟
+- هل توجد أعراض أخرى؟
+
+وإذا كنت تبحثين عن طبيب أو مستشفى، اذكري المدينة والتخصص.
+"""
+
+    if (
+        "doctor" in text
+        or "specialist" in text
+    ):
+
+        return """
+### 👨‍⚕️ Doctor Search
+
+I can search the HealTrip prototype provider database.
+
+Try:
+
+**"Find a cardiologist in Riyadh."**
+
+or:
+
+**"Find an internal medicine doctor in Riyadh."**
+
+The displayed providers are demo records, not live appointment data.
+"""
+
+    if "hospital" in text:
+
+        return """
+### 🏥 Hospital Search
+
+I can search the prototype hospital database.
+
+You can specify:
+
+- City
+- Specialty
+- Emergency requirement
+
+Example:
+
+**"Find a hospital in Riyadh with emergency services."**
+"""
+
+    return """
+### 🤖 HealTrip AI
+
+I can help you navigate the next healthcare step.
+
+Tell me:
+
+- Your symptoms
+- How long they have been present
+- Severity
+- Your age
+- Any associated symptoms
+
+You can also ask me to search for a doctor or hospital.
+"""
 
 
 def run_agent(
@@ -128,98 +316,157 @@ def run_agent(
             ),
             "tools_used": [],
             "emergency": True,
+            "mode": "safety",
         }
 
-    client = get_client()
+    api_key = get_api_key()
 
-    if conversation is None:
-        conversation = []
+    if not api_key:
 
-    input_items = []
+        return {
+            "answer": local_fallback(
+                user_message,
+                language,
+            ),
+            "tools_used": [],
+            "emergency": False,
+            "mode": "local_fallback",
+            "error": "OPENAI_API_KEY is not configured.",
+        }
 
-    for message in conversation:
+    try:
 
-        input_items.append(
+        client = OpenAI(
+            api_key=api_key
+        )
+
+        model = get_model()
+
+        messages = [
             {
-                "role": message["role"],
-                "content": message["content"],
+                "role": "system",
+                "content": SYSTEM_PROMPT,
+            }
+        ]
+
+        if conversation:
+
+            for message in conversation[-10:]:
+
+                if message.get("role") in [
+                    "user",
+                    "assistant",
+                ]:
+
+                    messages.append(
+                        {
+                            "role": message["role"],
+                            "content": message["content"],
+                        }
+                    )
+
+        messages.append(
+            {
+                "role": "user",
+                "content": user_message,
             }
         )
 
-    input_items.append(
-        {
-            "role": "user",
-            "content": user_message,
-        }
-    )
-
-    response = client.responses.create(
-        model=MODEL,
-        instructions=SYSTEM_PROMPT,
-        input=input_items,
-        tools=TOOL_DEFINITIONS,
-        tool_choice="auto",
-    )
-
-    tools_used = []
-
-    tool_outputs = []
-
-    for item in response.output:
-
-        if item.type != "function_call":
-            continue
-
-        tools_used.append(
-            item.name
-        )
-
-        try:
-            arguments = json.loads(
-                item.arguments
-            )
-        except Exception:
-            arguments = {}
-
-        tool_result = execute_tool(
-            item.name,
-            arguments,
-        )
-
-        tool_outputs.append(
-            {
-                "type": "function_call_output",
-                "call_id": item.call_id,
-                "output": tool_result,
-            }
-        )
-
-    if tool_outputs:
-
-        follow_up_input = input_items.copy()
-
-        for item in response.output:
-            follow_up_input.append(item)
-
-        follow_up_input.extend(
-            tool_outputs
-        )
-
-        final_response = client.responses.create(
-            model=MODEL,
-            instructions=SYSTEM_PROMPT,
-            input=follow_up_input,
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
             tools=TOOL_DEFINITIONS,
+            tool_choice="auto",
         )
 
-        answer = final_response.output_text
+        assistant_message = response.choices[0].message
 
-    else:
+        tools_used = []
 
-        answer = response.output_text
+        if assistant_message.tool_calls:
 
-    return {
-        "answer": answer,
-        "tools_used": tools_used,
-        "emergency": False,
-    }
+            messages.append(
+                assistant_message.model_dump(
+                    exclude_none=True
+                )
+            )
+
+            for tool_call in assistant_message.tool_calls:
+
+                function_name = (
+                    tool_call.function.name
+                )
+
+                tools_used.append(
+                    function_name
+                )
+
+                try:
+
+                    arguments = json.loads(
+                        tool_call.function.arguments
+                    )
+
+                except Exception:
+
+                    arguments = {}
+
+                tool_result = execute_tool(
+                    function_name,
+                    arguments,
+                )
+
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": tool_result,
+                    }
+                )
+
+            final_response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+            )
+
+            answer = (
+                final_response.choices[0]
+                .message
+                .content
+            )
+
+        else:
+
+            answer = assistant_message.content
+
+        if not answer:
+
+            answer = local_fallback(
+                user_message,
+                language,
+            )
+
+        return {
+            "answer": answer,
+            "tools_used": tools_used,
+            "emergency": False,
+            "mode": "openai",
+        }
+
+    except Exception as error:
+
+        fallback = local_fallback(
+            user_message,
+            language,
+        )
+
+        return {
+            "answer": fallback,
+            "tools_used": [],
+            "emergency": False,
+            "mode": "fallback",
+            "error": (
+                f"{type(error).__name__}: "
+                f"{str(error)}"
+            ),
+        }
