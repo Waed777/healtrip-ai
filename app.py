@@ -1,216 +1,183 @@
-import streamlit as st
+import json
+import os
 
-from agent import run_agent
-from database import initialize_database
+from openai import OpenAI
 
-
-st.set_page_config(
-    page_title="HealTrip AI",
-    page_icon="🩺",
-    layout="centered",
-    initial_sidebar_state="expanded",
-)
+from safety import detect_emergency, emergency_response
+from tools import TOOL_DEFINITIONS, execute_tool
 
 
-initialize_database()
+MODEL = os.getenv("OPENAI_MODEL", "gpt-5")
 
 
-st.markdown(
-    """
-    <style>
-    .main-title {
-        font-size: 42px;
-        font-weight: 800;
-        margin-bottom: 0;
-    }
+SYSTEM_PROMPT = """
+You are HealTrip AI, a Patient Decision Assistant.
 
-    .subtitle {
-        font-size: 18px;
-        color: #6b7280;
-        margin-bottom: 25px;
-    }
+Your job is to help users identify an appropriate healthcare next step.
 
-    .disclaimer {
-        background-color: #fff7ed;
-        padding: 14px;
-        border-radius: 10px;
-        border: 1px solid #fed7aa;
-        font-size: 14px;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+You are NOT a doctor.
+You MUST NOT diagnose diseases.
+You MUST NOT claim certainty about a medical condition.
+
+SAFETY:
+- If symptoms may indicate an emergency, prioritize urgent medical evaluation.
+- Do not delay emergency care with unnecessary questions.
+- Do not replace professional medical care.
+
+CLARIFICATION:
+- Ask concise clarifying questions when important information is missing.
+- Useful information includes age, symptoms, duration, severity, and associated symptoms.
+
+TOOLS:
+- Use search_doctors when the user asks for a doctor or specialist.
+- Use search_hospitals when the user asks for hospital options.
+- Never invent doctors or hospitals.
+- Never invent appointments or availability.
+
+ANTI-HALLUCINATION:
+- Only mention doctors and hospitals returned by the database tools.
+- If there is no matching result, clearly say that no matching provider was found
+  in the prototype database.
+
+LANGUAGE:
+- Respond in the user's language.
+- Support Arabic and English.
+
+RESPONSE:
+When appropriate, structure the response as:
+1. Suggested next step
+2. Reason
+3. Information still needed
+4. Verified provider or hospital options
+
+Always remember that HealTrip AI is a prototype decision-support system.
+"""
 
 
-with st.sidebar:
-    st.title("🩺 HealTrip AI")
+def get_client():
+    api_key = os.getenv("OPENAI_API_KEY")
 
-    st.markdown(
-        """
-        **Patient Decision Assistant**
+    if not api_key:
+        try:
+            import streamlit as st
+            api_key = st.secrets.get("OPENAI_API_KEY")
+        except Exception:
+            api_key = None
 
-        This prototype demonstrates:
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY is not configured.")
 
-        - AI Agent
-        - Function Calling
-        - Provider Search
-        - Hospital Search
-        - Safety Guardrails
-        - SQLite Database
-        - Arabic / English support
-        """
+    return OpenAI(api_key=api_key)
+
+
+def detect_language(text):
+    arabic_count = sum(
+        1
+        for character in text
+        if "\u0600" <= character <= "\u06ff"
     )
 
-    st.divider()
+    if arabic_count > 3:
+        return "Arabic"
 
-    st.subheader("Architecture")
-
-    st.code(
-        """
-Patient
-   ↓
-Streamlit UI
-   ↓
-AI Agent
-   ↓
-Safety Layer
-   ↓
-Function Tools
-   ↓
-SQLite Database
-        """,
-        language="text",
-    )
-
-    st.divider()
-
-    st.caption(
-        "Prototype for technical evaluation. "
-        "Not a diagnostic medical system."
-    )
+    return "English"
 
 
-st.markdown(
-    '<div class="main-title">🩺 HealTrip AI</div>',
-    unsafe_allow_html=True,
-)
+def run_agent(user_message, conversation=None):
 
-st.markdown(
-    '<div class="subtitle">'
-    "Patient Decision Assistant"
-    "</div>",
-    unsafe_allow_html=True,
-)
+    language = detect_language(user_message)
 
+    emergency = detect_emergency(user_message)
 
-st.markdown(
-    """
-    <div class="disclaimer">
-    ⚠️ <b>Safety notice:</b> HealTrip AI does not diagnose medical
-    conditions. For severe or worsening symptoms, seek urgent medical care.
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+    if emergency["is_emergency"]:
+        return {
+            "answer": emergency_response(language),
+            "tools_used": [],
+            "emergency": True,
+        }
 
+    client = get_client()
 
-st.write("")
+    if conversation is None:
+        conversation = []
 
+    input_items = []
 
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+    for message in conversation:
+        input_items.append(
+            {
+                "role": message["role"],
+                "content": message["content"],
+            }
+        )
 
-
-if "conversation" not in st.session_state:
-    st.session_state.conversation = []
-
-
-if not st.session_state.messages:
-    st.info(
-        "Try: “I have chest discomfort and I am not sure "
-        "whether I should see a cardiologist.”"
-    )
-
-
-for message in st.session_state.messages:
-
-    with st.chat_message(message["role"]):
-
-        st.markdown(message["content"])
-
-        if message.get("tools_used"):
-            st.caption(
-                "Tools used: "
-                + ", ".join(message["tools_used"])
-            )
-
-
-prompt = st.chat_input(
-    "Describe your concern..."
-)
-
-
-if prompt:
-
-    st.session_state.messages.append(
+    input_items.append(
         {
             "role": "user",
-            "content": prompt,
+            "content": user_message,
         }
     )
 
-    with st.chat_message("user"):
-        st.markdown(prompt)
-
-    with st.chat_message("assistant"):
-
-        with st.spinner("Analyzing your request..."):
-
-            try:
-                result = run_agent(
-                    user_message=prompt,
-                    conversation=st.session_state.conversation,
-                )
-
-                answer = result["answer"]
-                tools_used = result["tools_used"]
-
-            except Exception as error:
-
-                answer = (
-                    "I’m sorry, but the AI service is currently "
-                    "unavailable. Please try again later.\n\n"
-                    f"Technical status: `{type(error).__name__}`"
-                )
-
-                tools_used = []
-
-        st.markdown(answer)
-
-        if tools_used:
-            st.caption(
-                "Verified database tools used: "
-                + ", ".join(tools_used)
-            )
-
-    st.session_state.messages.append(
-        {
-            "role": "assistant",
-            "content": answer,
-            "tools_used": tools_used,
-        }
+    response = client.responses.create(
+        model=MODEL,
+        instructions=SYSTEM_PROMPT,
+        input=input_items,
+        tools=TOOL_DEFINITIONS,
+        tool_choice="auto",
     )
 
-    st.session_state.conversation.extend(
-        [
+    tools_used = []
+
+    tool_outputs = []
+
+    for item in response.output:
+
+        if item.type != "function_call":
+            continue
+
+        tools_used.append(item.name)
+
+        try:
+            arguments = json.loads(item.arguments)
+        except Exception:
+            arguments = {}
+
+        tool_result = execute_tool(
+            item.name,
+            arguments,
+        )
+
+        tool_outputs.append(
             {
-                "role": "user",
-                "content": prompt,
-            },
-            {
-                "role": "assistant",
-                "content": answer,
-            },
-        ]
-    )
+                "type": "function_call_output",
+                "call_id": item.call_id,
+                "output": tool_result,
+            }
+        )
+
+    if tool_outputs:
+
+        follow_up_input = input_items.copy()
+
+        for item in response.output:
+            follow_up_input.append(item)
+
+        follow_up_input.extend(tool_outputs)
+
+        final_response = client.responses.create(
+            model=MODEL,
+            instructions=SYSTEM_PROMPT,
+            input=follow_up_input,
+            tools=TOOL_DEFINITIONS,
+        )
+
+        answer = final_response.output_text
+
+    else:
+        answer = response.output_text
+
+    return {
+        "answer": answer,
+        "tools_used": tools_used,
+        "emergency": False,
+    }
