@@ -16,9 +16,25 @@ def initialize_database():
     connection = get_connection()
     cursor = connection.cursor()
 
-    cursor.executescript(
+    # --------------------------------------------------------
+    # RESET PROTOTYPE DATABASE
+    # --------------------------------------------------------
+
+    cursor.execute(
+        "DROP TABLE IF EXISTS doctors"
+    )
+
+    cursor.execute(
+        "DROP TABLE IF EXISTS hospitals"
+    )
+
+    # --------------------------------------------------------
+    # CREATE TABLES
+    # --------------------------------------------------------
+
+    cursor.execute(
         """
-        CREATE TABLE IF NOT EXISTS hospitals (
+        CREATE TABLE hospitals (
             id INTEGER PRIMARY KEY,
             name TEXT NOT NULL,
             city TEXT NOT NULL,
@@ -26,9 +42,13 @@ def initialize_database():
             emergency_available INTEGER NOT NULL,
             specialties TEXT NOT NULL,
             demo_data INTEGER NOT NULL DEFAULT 1
-        );
+        )
+        """
+    )
 
-        CREATE TABLE IF NOT EXISTS doctors (
+    cursor.execute(
+        """
+        CREATE TABLE doctors (
             id INTEGER PRIMARY KEY,
             name TEXT NOT NULL,
             specialty TEXT NOT NULL,
@@ -37,10 +57,15 @@ def initialize_database():
             country TEXT NOT NULL,
             languages TEXT NOT NULL,
             demo_data INTEGER NOT NULL DEFAULT 1,
-            FOREIGN KEY (hospital_id) REFERENCES hospitals(id)
-        );
+            FOREIGN KEY (hospital_id)
+                REFERENCES hospitals(id)
+        )
         """
     )
+
+    # --------------------------------------------------------
+    # HOSPITAL DATA
+    # --------------------------------------------------------
 
     hospitals = [
         (
@@ -89,6 +114,27 @@ def initialize_database():
             1,
         ),
     ]
+
+    cursor.executemany(
+        """
+        INSERT INTO hospitals
+        (
+            id,
+            name,
+            city,
+            country,
+            emergency_available,
+            specialties,
+            demo_data
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        hospitals,
+    )
+
+    # --------------------------------------------------------
+    # DOCTOR DATA
+    # --------------------------------------------------------
 
     doctors = [
         (
@@ -155,24 +201,7 @@ def initialize_database():
 
     cursor.executemany(
         """
-        INSERT OR IGNORE INTO hospitals
-        (
-            id,
-            name,
-            city,
-            country,
-            emergency_available,
-            specialties,
-            demo_data
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-        hospitals,
-    )
-
-    cursor.executemany(
-        """
-        INSERT OR IGNORE INTO doctors
+        INSERT INTO doctors
         (
             id,
             name,
@@ -191,6 +220,10 @@ def initialize_database():
     connection.commit()
     connection.close()
 
+
+# ============================================================
+# DOCTOR SEARCH
+# ============================================================
 
 def search_doctors(
     specialty=None,
@@ -217,18 +250,26 @@ def search_doctors(
     parameters = []
 
     if specialty:
+
         query += """
             AND LOWER(doctors.specialty)
             LIKE LOWER(?)
         """
-        parameters.append(f"%{specialty}%")
+
+        parameters.append(
+            f"%{specialty}%"
+        )
 
     if city:
+
         query += """
             AND LOWER(doctors.city)
             LIKE LOWER(?)
         """
-        parameters.append(f"%{city}%")
+
+        parameters.append(
+            f"%{city}%"
+        )
 
     query += """
         ORDER BY doctors.name
@@ -241,8 +282,15 @@ def search_doctors(
 
     connection.close()
 
-    return [dict(row) for row in rows]
+    return [
+        dict(row)
+        for row in rows
+    ]
 
+
+# ============================================================
+# HOSPITAL SEARCH
+# ============================================================
 
 def search_hospitals(
     city=None,
@@ -267,20 +315,29 @@ def search_hospitals(
     parameters = []
 
     if city:
+
         query += """
             AND LOWER(city)
             LIKE LOWER(?)
         """
-        parameters.append(f"%{city}%")
+
+        parameters.append(
+            f"%{city}%"
+        )
 
     if specialty:
+
         query += """
             AND LOWER(specialties)
             LIKE LOWER(?)
         """
-        parameters.append(f"%{specialty}%")
+
+        parameters.append(
+            f"%{specialty}%"
+        )
 
     if emergency_only:
+
         query += """
             AND emergency_available = 1
         """
@@ -296,12 +353,21 @@ def search_hospitals(
 
     connection.close()
 
-    return [dict(row) for row in rows]
+    return [
+        dict(row)
+        for row in rows
+    ]
 
+
+# ============================================================
+# ALL RECORDS
+# ============================================================
 
 def get_all_doctors():
+
     return search_doctors()
 
 
 def get_all_hospitals():
+
     return search_hospitals()
