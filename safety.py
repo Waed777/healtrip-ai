@@ -3,18 +3,20 @@ EMERGENCY_PATTERNS = [
     "chest pain",
     "difficulty breathing",
     "shortness of breath",
-    "can't breathe",
     "cannot breathe",
+    "can't breathe",
     "fainting",
     "unconscious",
     "heavy bleeding",
     "stroke",
     "severe allergic reaction",
-    "ضيق شديد في التنفس",
-    "صعوبة في التنفس",
     "ألم شديد في الصدر",
     "ألم في الصدر",
+    "ضيق شديد في التنفس",
+    "صعوبة في التنفس",
+    "لا أستطيع التنفس",
     "إغماء",
+    "فاقد الوعي",
     "نزيف شديد",
     "جلطة",
     "حساسية شديدة",
@@ -22,39 +24,46 @@ EMERGENCY_PATTERNS = [
 
 
 def detect_emergency(text):
+
     normalized = text.lower().strip()
 
-    matches = [
-        pattern
-        for pattern in EMERGENCY_PATTERNS
-        if pattern in normalized
-    ]
+    matches = []
+
+    for pattern in EMERGENCY_PATTERNS:
+
+        if pattern.lower() in normalized:
+            matches.append(pattern)
 
     return {
-        "is_emergency": bool(matches),
+        "is_emergency": len(matches) > 0,
         "matched_patterns": matches,
     }
 
 
 def emergency_response(language="English"):
-    if language == "Arabic":
-        return (
-            "⚠️ **قد تكون هذه حالة طارئة.**\n\n"
-            "الأعراض التي وصفتها قد تستدعي تقييمًا طبيًا عاجلًا. "
-            "لا تعتمد على HealTrip AI لتشخيص الحالة.\n\n"
-            "**إذا كانت الأعراض شديدة أو تتفاقم، توجّه إلى أقرب قسم طوارئ "
-            "أو اتصل بخدمات الطوارئ المحلية الآن.**\n\n"
-            "إذا كنت قادرًا على ذلك بأمان، أخبرني أيضًا عن العمر، "
-            "مدة الأعراض، وهل توجد صعوبة في التنفس أو إغماء."
-        )
 
-    return (
-        "⚠️ **This may require urgent medical evaluation.**\n\n"
-        "The symptoms you described can require prompt medical assessment. "
-        "Do not rely on HealTrip AI to diagnose your condition.\n\n"
-        "**If the symptoms are severe or worsening, go to the nearest "
-        "emergency department or contact local emergency services now.**\n\n"
-        "If you can do so safely, you can also tell me your age, "
-        "how long the symptoms have been present, and whether you have "
-        "difficulty breathing or fainting."
-    )
+    if language == "Arabic":
+
+        return """
+### 🚨 قد تحتاج هذه الأعراض إلى تقييم طبي عاجل
+
+الأعراض التي وصفتها قد تستدعي تقييماً طبياً سريعاً.
+
+**HealTrip AI لا يشخّص الحالة ولا يمكنه استبعاد الحالات الخطيرة.**
+
+إذا كانت الأعراض شديدة أو تتفاقم، توجّه إلى أقرب قسم طوارئ أو اتصل بخدمات الطوارئ المحلية.
+
+لا تؤخر طلب الرعاية الطبية بسبب استخدام هذا التطبيق.
+"""
+
+    return """
+### 🚨 Urgent medical evaluation may be appropriate
+
+The symptoms you described may require prompt medical assessment.
+
+**HealTrip AI does not diagnose conditions and cannot rule out serious causes.**
+
+If symptoms are severe or worsening, go to the nearest emergency department or contact local emergency services.
+
+Do not delay medical care because of this application.
+"""
