@@ -9,92 +9,123 @@ from tools import TOOL_DEFINITIONS, execute_tool
 
 MODEL = os.getenv("OPENAI_MODEL", "gpt-5")
 
+
 SYSTEM_PROMPT = """
 You are HealTrip AI, a Patient Decision Assistant.
 
-Your job is to help users decide what type of medical next step may be
-appropriate based on the information they provide.
+You help users identify an appropriate next healthcare step.
 
 You are NOT a doctor.
 You MUST NOT diagnose diseases.
 You MUST NOT claim certainty about a medical condition.
 
-SAFETY:
-- If symptoms suggest a possible emergency, prioritize urgent medical
-  evaluation.
-- Do not delay emergency care by asking unnecessary questions.
-- Do not provide instructions that could replace professional emergency care.
+If symptoms may indicate an emergency, prioritize urgent medical evaluation.
 
-CLARIFICATION:
-- Ask concise clarifying questions when important information is missing.
-- Useful information may include age, symptoms, duration, severity,
-  associated symptoms, and relevant medical context.
+Ask concise clarification questions when important information is missing.
 
-TOOLS:
-- Use the doctor search tool when the user asks for a specialist or doctor.
-- Use the hospital search tool when the user asks for hospital options.
-- Use the tools instead of inventing provider information.
+Use database tools when the user asks for doctors or hospitals.
 
-ANTI-HALLUCINATION:
-- NEVER invent doctors.
-- NEVER invent hospitals.
-- NEVER invent availability, appointments, prices, ratings, phone numbers,
-  addresses, or medical credentials.
-- Only mention doctors and hospitals returned by the tools.
-- If the database has no matching result, explicitly say that no matching
-  provider was found in the prototype database.
+Never invent doctors, hospitals, appointments, prices, ratings,
+phone numbers, addresses, or availability.
 
-LANGUAGE:
-- Reply in the user's language.
-- Support both Arabic and English.
-- Keep responses clear and concise.
+Only mention providers returned by the database tools.
 
-DECISION SUPPORT:
-When appropriate, structure the answer as:
-1. Suggested next step
-2. Why
-3. What information is still needed
-4. Verified provider/hospital options if requested
+If no provider is found, clearly say that no matching provider
+was found in the prototype database.
 
-Always make clear that HealTrip AI is a prototype decision-support system.
+Respond in the user's language.
+
+Support Arabic and English.
+
+This is a technical prototype and not a diagnostic medical system.
 """
 
 
-def get_client():
-    api_key = os.getenv("OPENAI_API_KEY")
+def get_api_key():
+    api_key = None
+
+    try:
+        import streamlit as st
+
+        if "OPENAI_API_KEY" in st.secrets:
+            api_key = st.secrets["OPENAI_API_KEY"]
+    except Exception:
+        pass
 
     if not api_key:
-        try:
-            import streamlit as st
-            api_key = st.secrets.get("OPENAI_API_KEY")
-        except Exception:
-            api_key = None
+        api_key = os.getenv("OPENAI_API_KEY")
 
     if not api_key:
         raise RuntimeError(
-            "OPENAI_API_KEY is not configured."
+            "OPENAI_API_KEY is missing."
         )
 
-    return OpenAI(api_key=api_key)
+    if not isinstance(api_key, str):
+        raise RuntimeError(
+            "OPENAI_API_KEY is not a string."
+        )
+
+    api_key = api_key.strip()
+
+    if not api_key:
+        raise RuntimeError(
+            "OPENAI_API_KEY is empty."
+        )
+
+    try:
+        api_key.encode("ascii")
+    except UnicodeEncodeError:
+        raise RuntimeError(
+            "OPENAI_API_KEY contains non-ASCII characters. "
+            "Create a new API key and paste it directly into "
+            "Streamlit Secrets."
+        )
+
+    return api_key
+
+
+def get_client():
+
+    api_key = get_api_key()
+
+    return OpenAI(
+        api_key=api_key,
+    )
 
 
 def detect_language(text):
-    arabic_characters = sum(
-        1 for character in text
+
+    arabic_count = sum(
+        1
+        for character in text
         if "\u0600" <= character <= "\u06ff"
     )
 
-    return "Arabic" if arabic_characters > 3 else "English"
+    if arabic_count > 3:
+        return "Arabic"
+
+    return "English"
 
 
-def run_agent(user_message, conversation=None):
-    language = detect_language(user_message)
+def run_agent(
+    user_message,
+    conversation=None,
+):
 
-    emergency = detect_emergency(user_message)
+    language = detect_language(
+        user_message
+    )
+
+    emergency = detect_emergency(
+        user_message
+    )
 
     if emergency["is_emergency"]:
+
         return {
-            "answer": emergency_response(language),
+            "answer": emergency_response(
+                language
+            ),
             "tools_used": [],
             "emergency": True,
         }
@@ -104,12 +135,23 @@ def run_agent(user_message, conversation=None):
     if conversation is None:
         conversation = []
 
-    input_items = conversation + [
+    input_items = []
+
+    for message in conversation:
+
+        input_items.append(
+            {
+                "role": message["role"],
+                "content": message["content"],
+            }
+        )
+
+    input_items.append(
         {
             "role": "user",
             "content": user_message,
         }
-    ]
+    )
 
     response = client.responses.create(
         model=MODEL,
@@ -117,47 +159,63 @@ def run_agent(user_message, conversation=None):
         input=input_items,
         tools=TOOL_DEFINITIONS,
         tool_choice="auto",
-        parallel_tool_calls=True,
     )
 
     tools_used = []
 
+    tool_outputs = []
+
     for item in response.output:
+
         if item.type != "function_call":
             continue
 
-        tools_used.append(item.name)
+        tools_used.append(
+            item.name
+        )
 
         try:
-            arguments = json.loads(item.arguments)
-        except json.JSONDecodeError:
+            arguments = json.loads(
+                item.arguments
+            )
+        except Exception:
             arguments = {}
 
-        tool_output = execute_tool(
+        tool_result = execute_tool(
             item.name,
             arguments,
         )
 
-        input_items.append(item)
-
-        input_items.append(
+        tool_outputs.append(
             {
                 "type": "function_call_output",
                 "call_id": item.call_id,
-                "output": tool_output,
+                "output": tool_result,
             }
         )
 
-    if tools_used:
+    if tool_outputs:
+
+        follow_up_input = input_items.copy()
+
+        for item in response.output:
+            follow_up_input.append(item)
+
+        follow_up_input.extend(
+            tool_outputs
+        )
+
         final_response = client.responses.create(
             model=MODEL,
             instructions=SYSTEM_PROMPT,
-            input=input_items,
+            input=follow_up_input,
             tools=TOOL_DEFINITIONS,
         )
 
         answer = final_response.output_text
+
     else:
+
         answer = response.output_text
 
     return {
