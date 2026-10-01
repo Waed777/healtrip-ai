@@ -1,8 +1,12 @@
+```python
 import streamlit as st
 
 from agent import run_agent
-from database import initialize_database
 
+
+# ============================================================
+# PAGE CONFIG
+# ============================================================
 
 st.set_page_config(
     page_title="HealTrip AI",
@@ -12,12 +16,9 @@ st.set_page_config(
 )
 
 
-initialize_database()
-
-
-# ---------------------------------------------------------
+# ============================================================
 # SESSION STATE
-# ---------------------------------------------------------
+# ============================================================
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -25,71 +26,129 @@ if "messages" not in st.session_state:
 if "conversation" not in st.session_state:
     st.session_state.conversation = []
 
-if "language" not in st.session_state:
-    st.session_state.language = "English"
-
 if "assessment_started" not in st.session_state:
     st.session_state.assessment_started = False
 
+if "language" not in st.session_state:
+    st.session_state.language = "English"
 
-# ---------------------------------------------------------
-# LANGUAGE
-# ---------------------------------------------------------
+
+# ============================================================
+# CUSTOM CSS
+# ============================================================
+
+st.markdown(
+    """
+    <style>
+
+    .main {
+        padding-top: 1rem;
+    }
+
+    .hero {
+        padding: 28px;
+        border-radius: 20px;
+        background: linear-gradient(
+            135deg,
+            #0f172a 0%,
+            #172554 50%,
+            #1e3a8a 100%
+        );
+        color: white;
+        margin-bottom: 24px;
+    }
+
+    .hero h1 {
+        font-size: 42px;
+        margin-bottom: 8px;
+    }
+
+    .hero p {
+        font-size: 18px;
+        opacity: 0.9;
+    }
+
+    .card {
+        padding: 20px;
+        border-radius: 16px;
+        border: 1px solid rgba(128,128,128,0.25);
+        margin-bottom: 16px;
+        background: rgba(128,128,128,0.04);
+    }
+
+    .small-text {
+        font-size: 13px;
+        opacity: 0.75;
+    }
+
+    .success-box {
+        padding: 14px;
+        border-radius: 12px;
+        background: rgba(34,197,94,0.10);
+        border: 1px solid rgba(34,197,94,0.25);
+    }
+
+    .warning-box {
+        padding: 14px;
+        border-radius: 12px;
+        background: rgba(245,158,11,0.10);
+        border: 1px solid rgba(245,158,11,0.25);
+    }
+
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+# ============================================================
+# SIDEBAR
+# ============================================================
 
 with st.sidebar:
 
-    st.markdown(
-        """
-        <div style="text-align:center;">
-            <h1>🩺 HealTrip AI</h1>
-            <p>Patient Decision Assistant</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.markdown("## 🩺 HealTrip AI")
+
+    st.caption("Patient Decision Assistant")
 
     st.divider()
 
-    language = st.radio(
+    language = st.selectbox(
         "Language",
-        ["English", "العربية"],
+        ["English", "Arabic"],
         index=0 if st.session_state.language == "English" else 1,
     )
 
-    if language == "العربية":
-        st.session_state.language = "Arabic"
-    else:
-        st.session_state.language = "English"
+    st.session_state.language = language
 
     st.divider()
 
-    st.subheader(
-        "Patient Assessment"
-        if st.session_state.language == "English"
-        else "التقييم الصحي"
-    )
+    st.markdown("### System capabilities")
 
     st.markdown(
         """
-        <div style="
-            padding:12px;
-            border-radius:10px;
-            border:1px solid #d1d5db;
-        ">
-        🟢 <b>AI Decision Support</b><br>
-        🟢 Safety Screening<br>
-        🟢 Verified Provider Search<br>
-        🟢 Hospital Search<br>
-        🟢 Arabic / English
-        </div>
-        """,
-        unsafe_allow_html=True,
+        ✅ AI Agent
+
+        ✅ Safety Guardrails
+
+        ✅ Function Calling
+
+        ✅ Doctor Search
+
+        ✅ Hospital Search
+
+        ✅ SQLite Database
+
+        ✅ Arabic / English
+
+        ✅ Anti-Hallucination
+        """
     )
 
     st.divider()
 
     if st.button(
-        "🔄 New Assessment",
+        "🆕 Start New Assessment",
         use_container_width=True,
     ):
         st.session_state.messages = []
@@ -100,248 +159,371 @@ with st.sidebar:
     st.divider()
 
     st.caption(
-        "HealTrip AI is a prototype decision-support system. "
-        "It does not diagnose medical conditions."
+        "Prototype for technical evaluation.\n\n"
+        "Not a diagnostic medical system."
     )
 
 
-# ---------------------------------------------------------
-# HEADER
-# ---------------------------------------------------------
+# ============================================================
+# HERO
+# ============================================================
 
 st.markdown(
     """
-    <div style="
-        padding:28px;
-        border-radius:18px;
-        background:linear-gradient(
-            135deg,
-            #0f172a,
-            #1e3a5f
-        );
-        color:white;
-        margin-bottom:25px;
-    ">
-        <h1 style="margin:0;">
-            🩺 HealTrip AI
-        </h1>
-        <p style="font-size:20px;margin-top:8px;">
-            Intelligent Patient Decision Assistant
+    <div class="hero">
+
+        <h1>🩺 HealTrip AI</h1>
+
+        <p>
+        Patient Decision Assistant
         </p>
-        <p style="opacity:0.85;">
-            From symptoms to a safer next step.
+
+        <p>
+        AI-powered healthcare navigation with
+        safety-aware reasoning, database tools,
+        and multilingual support.
         </p>
+
     </div>
     """,
     unsafe_allow_html=True,
 )
 
 
-# ---------------------------------------------------------
-# QUICK ACTIONS
-# ---------------------------------------------------------
+# ============================================================
+# SAFETY NOTICE
+# ============================================================
+
+st.markdown(
+    """
+    <div class="warning-box">
+
+    ⚠️ <strong>Safety Notice</strong><br><br>
+
+    HealTrip AI is a technical prototype designed to support
+    healthcare decision navigation. It does not diagnose medical
+    conditions and does not replace professional medical care.
+
+    If symptoms may require urgent medical attention,
+    seek appropriate emergency medical evaluation.
+
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+st.write("")
+
+
+# ============================================================
+# INTRO / QUICK ACTIONS
+# ============================================================
 
 if not st.session_state.messages:
 
-    st.markdown(
-        "### How can HealTrip AI help?"
-        if st.session_state.language == "English"
-        else "### كيف يمكن لـ HealTrip AI مساعدتك؟"
-    )
+    st.markdown("## How can HealTrip AI help?")
 
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.info(
-            "🚨 **Urgent symptoms**\n\n"
-            "Screen symptoms that may require urgent evaluation."
+        st.markdown(
+            """
+            <div class="card">
+
+            <h3>🧭 Care Direction</h3>
+
+            Helps identify an appropriate
+            next healthcare step based on
+            the information provided.
+
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
 
     with col2:
-        st.info(
-            "🩺 **Find a specialist**\n\n"
-            "Search verified doctors by specialty and city."
+        st.markdown(
+            """
+            <div class="card">
+
+            <h3>👨‍⚕️ Specialist Search</h3>
+
+            Uses database tools to find
+            matching specialists instead
+            of inventing providers.
+
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
 
     with col3:
-        st.info(
-            "🏥 **Find a hospital**\n\n"
-            "Search hospitals using the verified prototype database."
+        st.markdown(
+            """
+            <div class="card">
+
+            <h3>🏥 Hospital Search</h3>
+
+            Searches the prototype hospital
+            database according to location,
+            specialty, and emergency capability.
+
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
 
-    st.divider()
+    st.markdown("### Try a scenario")
+
+    example_col1, example_col2 = st.columns(2)
+
+    with example_col1:
+
+        if st.button(
+            "🫀 Chest pain",
+            use_container_width=True,
+        ):
+            st.session_state.pending_prompt = (
+                "I have chest pain and I am not sure "
+                "whether I should see a cardiologist "
+                "or go to the emergency department."
+            )
+            st.rerun()
+
+    with example_col2:
+
+        if st.button(
+            "👨‍⚕️ Find a cardiologist",
+            use_container_width=True,
+        ):
+            st.session_state.pending_prompt = (
+                "I want to find a cardiologist in Riyadh."
+            )
+            st.rerun()
+
+    st.write("")
 
     st.markdown(
-        "### Try a scenario"
-        if st.session_state.language == "English"
-        else "### جرّبي سيناريو"
+        """
+        <div class="small-text">
+
+        Example: You can describe your symptoms,
+        ask for a specialist, or ask for hospital options.
+
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
-    examples = [
-        "I have chest discomfort and I am not sure what I should do.",
-        "I want to see a cardiologist in Riyadh.",
-        "I need a hospital in Riyadh with emergency services.",
-        "أريد طبيب قلب في الرياض.",
-    ]
 
-    selected_example = st.selectbox(
-        "Example",
-        examples,
-        label_visibility="collapsed",
-    )
-
-    if st.button(
-        "Use this scenario",
-        type="primary",
-    ):
-        st.session_state.pending_prompt = selected_example
-        st.rerun()
-
-
-# ---------------------------------------------------------
+# ============================================================
 # CHAT HISTORY
-# ---------------------------------------------------------
+# ============================================================
 
 for message in st.session_state.messages:
 
+    role = message["role"]
+
     with st.chat_message(
-        message["role"]
+        "user" if role == "user" else "assistant"
     ):
 
-        st.markdown(
-            message["content"]
-        )
-
-        if message.get("tools_used"):
-
-            st.caption(
-                "🔧 Verified tools: "
-                + ", ".join(
-                    message["tools_used"]
-                )
-            )
+        st.markdown(message["content"])
 
 
-# ---------------------------------------------------------
-# INPUT
-# ---------------------------------------------------------
+# ============================================================
+# PENDING EXAMPLE
+# ============================================================
 
-prompt = st.chat_input(
-    "Describe your concern..."
-    if st.session_state.language == "English"
-    else "اكتب ما تشعر به..."
+pending_prompt = st.session_state.pop(
+    "pending_prompt",
+    None,
 )
 
 
-if "pending_prompt" in st.session_state:
+# ============================================================
+# CHAT INPUT
+# ============================================================
 
-    prompt = st.session_state.pending_prompt
+user_prompt = st.chat_input(
+    "Describe your situation or ask about a specialist..."
+)
 
-    del st.session_state.pending_prompt
+
+if pending_prompt:
+    user_prompt = pending_prompt
 
 
-# ---------------------------------------------------------
-# AGENT EXECUTION
-# ---------------------------------------------------------
+# ============================================================
+# PROCESS USER MESSAGE
+# ============================================================
 
-if prompt:
+if user_prompt:
 
     st.session_state.assessment_started = True
+
+    # --------------------------------------------------------
+    # USER MESSAGE
+    # --------------------------------------------------------
 
     st.session_state.messages.append(
         {
             "role": "user",
-            "content": prompt,
+            "content": user_prompt,
         }
     )
 
     with st.chat_message("user"):
-        st.markdown(prompt)
+        st.markdown(user_prompt)
+
+    # --------------------------------------------------------
+    # AI RESPONSE
+    # --------------------------------------------------------
 
     with st.chat_message("assistant"):
 
-        with st.spinner(
-            "Analyzing your request..."
-            if st.session_state.language == "English"
-            else "جارٍ تحليل طلبك..."
-        ):
+        with st.spinner("Analyzing your request..."):
 
             try:
 
                 result = run_agent(
-                    user_message=prompt,
+                    user_message=user_prompt,
                     conversation=st.session_state.conversation,
                 )
 
-                answer = result["answer"]
-
-                tools_used = result[
-                    "tools_used"
-                ]
-
-                emergency = result[
-                    "emergency"
-                ]
-
-            except Exception:
-
-                answer = (
-                    "The AI service is temporarily unavailable. "
-                    "Please try again shortly."
-                    if st.session_state.language == "English"
-                    else
-                    "خدمة الذكاء الاصطناعي غير متاحة مؤقتًا. "
-                    "يرجى المحاولة مرة أخرى."
+                answer = result.get(
+                    "answer",
+                    "No response was generated.",
                 )
 
-                tools_used = []
+                tools_used = result.get(
+                    "tools_used",
+                    [],
+                )
 
-                emergency = False
+                emergency = result.get(
+                    "emergency",
+                    False,
+                )
 
-        if emergency:
+                # --------------------------------------------
+                # DISPLAY RESPONSE
+                # --------------------------------------------
 
-            st.error(answer)
+                st.markdown(answer)
 
-        else:
+                # --------------------------------------------
+                # SAFETY STATUS
+                # --------------------------------------------
 
-            st.markdown(answer)
+                if emergency:
 
-        if tools_used:
+                    st.warning(
+                        "Safety escalation activated."
+                    )
 
-            st.caption(
-                "🔧 Verified tools used: "
-                + ", ".join(tools_used)
-            )
+                # --------------------------------------------
+                # TOOL TRANSPARENCY
+                # --------------------------------------------
 
-    st.session_state.messages.append(
-        {
-            "role": "assistant",
-            "content": answer,
-            "tools_used": tools_used,
-        }
-    )
+                if tools_used:
 
-    st.session_state.conversation.extend(
-        [
-            {
-                "role": "user",
-                "content": prompt,
-            },
-            {
-                "role": "assistant",
-                "content": answer,
-            },
-        ]
-    )
+                    with st.expander(
+                        "🔧 Tools used by AI Agent"
+                    ):
+
+                        for tool in tools_used:
+
+                            st.write(
+                                f"• `{tool}`"
+                            )
+
+                # --------------------------------------------
+                # SAVE ASSISTANT MESSAGE
+                # --------------------------------------------
+
+                st.session_state.messages.append(
+                    {
+                        "role": "assistant",
+                        "content": answer,
+                    }
+                )
+
+                # --------------------------------------------
+                # UPDATE CONVERSATION
+                # --------------------------------------------
+
+                st.session_state.conversation.append(
+                    {
+                        "role": "user",
+                        "content": user_prompt,
+                    }
+                )
+
+                st.session_state.conversation.append(
+                    {
+                        "role": "assistant",
+                        "content": answer,
+                    }
+                )
+
+            except Exception as error:
+
+                # ============================================
+                # USER FRIENDLY ERROR
+                # ============================================
+
+                st.error(
+                    "Unfortunately, the AI service is currently "
+                    "unavailable."
+                )
+
+                st.markdown(
+                    """
+                    Please check the technical diagnostics below.
+                    This diagnostic information is displayed
+                    temporarily during development.
+                    """
+                )
+
+                # ============================================
+                # REAL ERROR
+                # ============================================
+
+                with st.expander(
+                    "🔍 Technical diagnostics — click to open"
+                ):
+
+                    st.code(
+                        f"Error type:\n"
+                        f"{type(error).__name__}\n\n"
+                        f"Error message:\n"
+                        f"{str(error)}"
+                    )
+
+                    st.write(
+                        "This information does not expose your "
+                        "OpenAI API key."
+                    )
 
 
-# ---------------------------------------------------------
+# ============================================================
 # FOOTER
-# ---------------------------------------------------------
+# ============================================================
 
 st.divider()
 
-st.caption(
-    "HealTrip AI • AI-powered healthcare decision support prototype • "
-    "Not a medical diagnosis system"
-)
+footer_col1, footer_col2 = st.columns(2)
+
+with footer_col1:
+
+    st.caption(
+        "HealTrip AI • AI-powered healthcare navigation prototype"
+    )
+
+with footer_col2:
+
+    st.caption(
+        "Safety-aware • Tool-using • Multilingual • Database-grounded"
+    )
